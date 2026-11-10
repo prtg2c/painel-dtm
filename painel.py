@@ -2,7 +2,6 @@ import os
 from io import StringIO
 from github import Github
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 import yfinance as yf
 
@@ -11,10 +10,8 @@ st.title("📈 Meu Painel de Investimentos")
 
 ARQUIVO_DADOS = "carteira.csv"
 
-
 def usar_github():
     return "GITHUB_TOKEN" in st.secrets and "GITHUB_REPO" in st.secrets
-
 
 def carregar_carteira():
     if usar_github():
@@ -43,7 +40,6 @@ def carregar_carteira():
     salvar_carteira(dados_iniciais)
     return dados_iniciais
 
-
 def salvar_carteira(df):
     csv_texto = df.to_csv(index=False)
 
@@ -70,7 +66,6 @@ def salvar_carteira(df):
             st.error(f"Erro ao salvar no GitHub: {e}")
 
     df.to_csv(ARQUIVO_DADOS, index=False)
-
 
 @st.cache_data(ttl=300)
 def buscar_dados_ativo(ticker):
@@ -101,7 +96,6 @@ def buscar_dados_ativo(ticker):
         return None, 0.0, 0.0
     except Exception:
         return None, 0.0, 0.0
-
 
 st.sidebar.header("Câmbio e Controles")
 
@@ -260,4 +254,15 @@ else:
         ativo_remover = st.selectbox("Selecione o ativo:", ["Selecione..."] + df_carteira["Ticker"].tolist())
         if ativo_remover != "Selecione...":
             if st.button("Confirmar Remoção"):
-                df_carteira = df_carteira[df_carteira["Ticker"] != ativo_remover]
+                # 1. Carrega a carteira original apenas com as colunas base
+                df_atual = carregar_carteira()
+                
+                # 2. Filtra removendo o ativo selecionado
+                df_atual = df_atual[df_atual["Ticker"] != ativo_remover]
+                
+                # 3. Salva a carteira atualizada no CSV/GitHub
+                salvar_carteira(df_atual)
+                
+                # 4. Exibe mensagem e recarrega a página para atualizar os dados
+                st.success(f"Ativo {ativo_remover} removido com sucesso!")
+                st.rerun()
