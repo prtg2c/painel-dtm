@@ -2,6 +2,7 @@ import os
 from io import StringIO
 from github import Github
 import pandas as pd
+import plotly.express as px  # Importação do Plotly adicionada de volta
 import streamlit as st
 import yfinance as yf
 
@@ -249,6 +250,43 @@ else:
     }
 
     st.dataframe(df_estilizado, use_container_width=True, hide_index=True, column_config=cols_cfg)
+    
+    # --- INÍCIO DA SEÇÃO DOS GRÁFICOS ---
+    st.divider()
+    st.subheader("Distribuição da Carteira")
+    
+    col_graf1, col_graf2 = st.columns(2)
+    
+    with col_graf1:
+        # Gráfico por Ativo
+        fig_ativos = px.pie(
+            df_carteira, 
+            values='Atual (R$)', 
+            names='Ticker',
+            title='Distribuição por Ativo',
+            hole=0.4 # Estilo "rosquinha" (donut chart), remova se preferir pizza inteira
+        )
+        # Ajusta a exibição para ficar limpa
+        fig_ativos.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_ativos, use_container_width=True)
+        
+    with col_graf2:
+        # Gráfico por Mercado (Nacional vs Exterior)
+        fig_mercados = px.pie(
+            df_carteira, 
+            values='Atual (R$)', 
+            names='Mercado',
+            title='Distribuição por Mercado (Nacional x Exterior)',
+            hole=0.4,
+            color='Mercado',
+            color_discrete_map={
+                'Brasil (Nacional)': '#009b3a', 
+                'Exterior (Internacional)': '#002868'
+            }
+        )
+        fig_mercados.update_traces(textposition='inside', textinfo='percent+label')
+        st.plotly_chart(fig_mercados, use_container_width=True)
+    # --- FIM DA SEÇÃO DOS GRÁFICOS ---
 
     with st.expander("🗑️ Remover um ativo da carteira"):
         ativo_remover = st.selectbox("Selecione o ativo:", ["Selecione..."] + df_carteira["Ticker"].tolist())
