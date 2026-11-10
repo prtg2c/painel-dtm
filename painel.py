@@ -104,6 +104,10 @@ def buscar_dados_ativo(ticker):
         return None, 0.0, 0.0
 
 
+# Carrega a carteira no início para alimentar a barra lateral e o painel
+df_carteira = carregar_carteira()
+
+# --- BARRA LATERAL ---
 st.sidebar.header("Câmbio e Controles")
 
 if usar_github():
@@ -123,7 +127,7 @@ if st.sidebar.button("🔄 Atualizar Cotações Agora"):
     st.rerun()
 
 st.sidebar.divider()
-st.sidebar.header("Gerenciar Carteira")
+st.sidebar.header("Adicionar / Editar Ativo")
 st.sidebar.markdown("**Regras:** Brasil (`.SA`) em **R$** | EUA em **US$**.")
 
 with st.sidebar.form("form_adicionar"):
@@ -149,8 +153,23 @@ with st.sidebar.form("form_adicionar"):
         st.sidebar.success(f"{novo_ticker} salvo com sucesso!")
         st.rerun()
 
-df_carteira = carregar_carteira()
+# --- REMOVER ATIVO NA BARRA LATERAL (FORA DE EXPANDER) ---
+if not df_carteira.empty:
+    st.sidebar.divider()
+    st.sidebar.header("🗑️ Remover Ativo")
+    lista_tickers = [str(t).strip() for t in df_carteira["Ticker"].tolist()]
+    ativo_remover = st.sidebar.selectbox("Escolha o ativo para excluir:", ["Selecione..."] + lista_tickers)
 
+    if ativo_remover != "Selecione...":
+        if st.sidebar.button("Confirmar Exclusão", type="primary"):
+            df_base = carregar_carteira()
+            df_base["Ticker"] = df_base["Ticker"].astype(str).str.strip()
+            df_novo = df_base[df_base["Ticker"] != ativo_remover]
+            salvar_carteira(df_novo[["Ticker", "Quantidade", "Preco_Medio"]])
+            time.sleep(1)
+            st.rerun()
+
+# --- PAINEL PRINCIPAL ---
 if df_carteira.empty:
     st.info("Sua carteira está vazia. Adicione seus ativos na barra lateral esquerda.")
 else:
@@ -247,16 +266,3 @@ else:
 
     cols_cfg = dict()
     cols_cfg["Quantidade"] = st.column_config.NumberColumn(format="%.4f")
-    cols_cfg["Preco_Medio"] = st.column_config.NumberColumn("Preço Médio", format="%.2f")
-    cols_cfg["Cotação Atual"] = st.column_config.NumberColumn(format="%.2f")
-    cols_cfg["DY (12m)"] = st.column_config.NumberColumn(format="%.2f%%")
-    cols_cfg["Investido (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
-    cols_cfg["Atual (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
-    cols_cfg["Lucro/Prejuízo (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
-    cols_cfg["Rentab. (%)"] = st.column_config.NumberColumn(format="%.2f%%")
-
-    st.dataframe(df_estilizado, use_container_width=True, hide_index=True, column_config=cols_cfg)
-
-    with st.expander("🗑️ Remover um ativo da carteira"):
-        with st.form("form_remover"):
-            lista_tickers = [str(t).strip() for t in df_carteira["Ticker"].tolist()]
