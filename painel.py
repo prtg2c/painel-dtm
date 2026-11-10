@@ -1,6 +1,6 @@
 import os
 from io import StringIO
-from github import Github
+from github import Auth, Github
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -16,18 +16,25 @@ def usar_github():
     return "GITHUB_TOKEN" in st.secrets and "GITHUB_REPO" in st.secrets
 
 
+def conectar_github():
+    token = st.secrets["GITHUB_TOKEN"].strip()
+    repo_nome = st.secrets["GITHUB_REPO"].strip()
+    auth = Auth.Token(token)
+    g = Github(auth=auth)
+    return g.get_repo(repo_nome)
+
+
 def carregar_carteira():
     if usar_github():
         try:
-            g = Github(st.secrets["GITHUB_TOKEN"])
-            repo = g.get_repo(st.secrets["GITHUB_REPO"])
+            repo = conectar_github()
             conteudo = repo.get_contents(ARQUIVO_DADOS)
             df = pd.read_csv(StringIO(conteudo.decoded_content.decode("utf-8")))
             if "Preco_Medio" not in df.columns:
                 df["Preco_Medio"] = 0.0
             return df
         except Exception as e:
-            st.error(f"Erro ao ler carteira do GitHub: {e}")
+            st.warning(f"Aviso ao ler do GitHub ({e}). Usando dados locais.")
 
     if os.path.exists(ARQUIVO_DADOS):
         df = pd.read_csv(ARQUIVO_DADOS)
@@ -40,17 +47,19 @@ def carregar_carteira():
         "Quantidade": [45.0, 40.0, 250.0, 6.0, 0.85, 2.15, 17.5],
         "Preco_Medio": [22.0, 25.0, 4.0, 160.0, 500.0, 200.0, 28.0],
     })
-    salvar_carteira(dados_iniciais)
     return dados_iniciais
 
 
 def salvar_carteira(df):
-    csv_texto = df.to_csv(index=False)
+    df_limpo = df[["Ticker", "Quantidade", "Preco_Medio"]].copy()
+    csv_texto = df_limpo.to_csv(index=False)
+
+    # Salva localmente primeiro
+    df_limpo.to_csv(ARQUIVO_DADOS, index=False)
 
     if usar_github():
         try:
-            g = Github(st.secrets["GITHUB_TOKEN"])
-            repo = g.get_repo(st.secrets["GITHUB_REPO"])
+            repo = conectar_github()
             try:
                 arquivo_remoto = repo.get_contents(ARQUIVO_DADOS)
                 repo.update_file(
@@ -62,14 +71,15 @@ def salvar_carteira(df):
             except Exception:
                 repo.create_file(
                     path=ARQUIVO_DADOS,
-                    message="Criação inicial da carteira via Streamlit",
+                    message="Criação do carteira.csv via Streamlit",
                     content=csv_texto,
                 )
-            return
+            st.toast("✅ Gravado no GitHub com sucesso!", icon="☁️")
+            return True
         except Exception as e:
-            st.error(f"Erro ao salvar no GitHub: {e}")
-
-    df.to_csv(ARQUIVO_DADOS, index=False)
+            st.error(f"❌ Falha ao gravar no GitHub: {e}")
+            return False
+    return True
 
 
 @st.cache_data(ttl=300)
@@ -103,10 +113,15 @@ def buscar_dados_ativo(ticker):
         return None, 0.0, 0.0
 
 
+# Inicializa a carteira na memória da sessão
+if "df_base" not in st.session_state:
+    st.session_state["df_base"] = carregar_carteira()
+
+# --- BARRA LATERAL ---
 st.sidebar.header("Câmbio e Controles")
 
 if usar_github():
-    st.sidebar.success("☁️ Sincronizado com GitHub")
+    st.sidebar.success(f"☁️ Conectado: `{st.secrets['GITHUB_REPO']}`")
 else:
     st.sidebar.info("💻 Modo Local (CSV)")
 
@@ -117,22 +132,27 @@ if cotacao_dolar is None:
 
 st.sidebar.metric("Cotação Dólar (USDBRL)", f"R$ {cotacao_dolar:.2f}", delta=f"{var_dolar:.2f}%")
 
-if st.sidebar.button("🔄 Atualizar Cotações Agora"):
+col_b1, col_b2 = st.sidebar.columns(2)
+if col_b1.button("🔄 Cotações"):
     st.cache_data.clear()
+    st.rerun()
+
+if col_b2.button("📥 Recarregar CSV"):
+    st.session_state["df_base"] = carregar_carteira()
     st.rerun()
 
 st.sidebar.divider()
 st.sidebar.header("Gerenciar Carteira")
 st.sidebar.markdown("**Regras:** Brasil (`.SA`) em **R$** | EUA em **US$**.")
 
-with st.sidebar.form("form_adicionar"):
+with st.sidebar.form("form_adicionar", clear_on_submit=True):
     novo_ticker = st.text_input("Código do Ativo (Ticker)").upper().strip()
     nova_qtd = st.number_input("Quantidade", min_value=0.0001, format="%.4f")
     novo_pm = st.number_input("Preço Médio (na moeda original)", min_value=0.01, format="%.2f")
     btn_adicionar = st.form_submit_button("Salvar / Atualizar Ativo")
 
     if btn_adicionar and novo_ticker:
-        df_atual = carregar_carteira()
+        df_atual = st.session_state["df_base"].copy()
         if novo_ticker in df_atual["Ticker"].values:
             df_atual.loc[df_atual["Ticker"] == novo_ticker, "Quantidade"] = nova_qtd
             df_atual.loc[df_atual["Ticker"] == novo_ticker, "Preco_Medio"] = novo_pm
@@ -143,11 +163,14 @@ with st.sidebar.form("form_adicionar"):
                 "Preco_Medio": [novo_pm],
             })
             df_atual = pd.concat([df_atual, novo_registro], ignore_index=True)
-        salvar_carteira(df_atual)
-        st.sidebar.success(f"{novo_ticker} salvo com sucesso!")
-        st.rerun()
 
-df_carteira = carregar_carteira()
+        if salvar_carteira(df_atual):
+            st.session_state["df_base"] = df_atual
+            st.sidebar.success(f"{novo_ticker} salvo!")
+            st.rerun()
+
+# --- PAINEL PRINCIPAL ---
+df_carteira = st.session_state["df_base"].copy()
 
 if df_carteira.empty:
     st.info("Sua carteira está vazia. Adicione seus ativos na barra lateral esquerda.")
@@ -248,16 +271,3 @@ else:
         "Preco_Medio": st.column_config.NumberColumn("Preço Médio", format="%.2f"),
         "Cotação Atual": st.column_config.NumberColumn(format="%.2f"),
         "DY (12m)": st.column_config.NumberColumn(format="%.2f%%"),
-        "Investido (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-        "Atual (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-        "Lucro/Prejuízo (R$)": st.column_config.NumberColumn(format="R$ %.2f"),
-        "Rentab. (%)": st.column_config.NumberColumn(format="%.2f%%"),
-    }
-
-    st.dataframe(df_estilizado, use_container_width=True, hide_index=True, column_config=cols_cfg)
-
-    with st.expander("🗑️ Remover um ativo da carteira"):
-        ativo_remover = st.selectbox("Selecione o ativo:", ["Selecione..."] + df_carteira["Ticker"].tolist())
-        if ativo_remover != "Selecione...":
-            if st.button("Confirmar Remoção"):
-                df_carteira = df_carteira[df_carteira["Ticker"] != ativo_remover]
