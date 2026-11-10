@@ -25,21 +25,31 @@ def conectar_github():
 
 
 def carregar_carteira():
+    df = None
     if usar_github():
         try:
             repo = conectar_github()
             conteudo = repo.get_contents(ARQUIVO_DADOS)
-            df = pd.read_csv(StringIO(conteudo.decoded_content.decode("utf-8")))
-            if "Preco_Medio" not in df.columns:
-                df["Preco_Medio"] = 0.0
-            return df
+            texto_csv = conteudo.decoded_content.decode("utf-8").strip()
+            if texto_csv:
+                df = pd.read_csv(StringIO(texto_csv), sep=None, engine="python")
         except Exception as e:
-            st.warning(f"Aviso ao ler do GitHub ({e}). Usando dados locais.")
+            st.error(f"Erro ao ler carteira do GitHub: {e}")
 
-    if os.path.exists(ARQUIVO_DADOS):
-        df = pd.read_csv(ARQUIVO_DADOS)
+    if df is None and os.path.exists(ARQUIVO_DADOS):
+        try:
+            df = pd.read_csv(ARQUIVO_DADOS, sep=None, engine="python")
+        except Exception as e:
+            st.error(f"Erro ao ler arquivo local: {e}")
+
+    if df is not None and not df.empty:
+        df.columns = [c.strip() for c in df.columns]
         if "Preco_Medio" not in df.columns:
             df["Preco_Medio"] = 0.0
+        for col in ["Quantidade", "Preco_Medio"]:
+            df[col] = pd.to_numeric(
+                df[col].astype(str).str.replace(",", "."), errors="coerce"
+            ).fillna(0.0)
         return df
 
     dados_iniciais = pd.DataFrame({
@@ -265,8 +275,3 @@ else:
     df_estilizado = df_carteira.style.map(colorir_lucro, subset=["Lucro/Prejuízo (R$)", "Rentab. (%)"])
 
     cols_cfg = dict()
-    cols_cfg["Quantidade"] = st.column_config.NumberColumn(format="%.4f")
-    cols_cfg["Preco_Medio"] = st.column_config.NumberColumn("Preço Médio", format="%.2f")
-    cols_cfg["Cotação Atual"] = st.column_config.NumberColumn(format="%.2f")
-    cols_cfg["DY (12m)"] = st.column_config.NumberColumn(format="%.2f%%")
-    cols_cfg["Investido (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
