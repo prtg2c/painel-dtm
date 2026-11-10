@@ -1,4 +1,5 @@
 import os
+import time
 from io import StringIO
 from github import Github
 import pandas as pd
@@ -144,6 +145,7 @@ with st.sidebar.form("form_adicionar"):
             })
             df_atual = pd.concat([df_atual, novo_registro], ignore_index=True)
         salvar_carteira(df_atual)
+        time.sleep(1)
         st.sidebar.success(f"{novo_ticker} salvo com sucesso!")
         st.rerun()
 
@@ -165,7 +167,7 @@ else:
 
     with st.spinner("Buscando cotações, variações e dividendos..."):
         for index, row in df_carteira.iterrows():
-            ticker = row["Ticker"]
+            ticker = str(row["Ticker"]).strip()
             qtd = row["Quantidade"]
             pm = row["Preco_Medio"]
             preco, var_dia, dy = buscar_dados_ativo(ticker)
@@ -257,5 +259,4 @@ else:
 
     with st.expander("🗑️ Remover um ativo da carteira"):
         with st.form("form_remover"):
-            ativo_remover = st.selectbox("Selecione o ativo:", ["Selecione..."] + df_carteira["Ticker"].tolist())
-            btn_remover = st.form_submit_button("Confirmar Remoção")
+            lista_tickers = [str(t).strip() for t in df_carteira["Ticker"].tolist()]
