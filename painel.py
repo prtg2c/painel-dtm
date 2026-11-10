@@ -149,6 +149,20 @@ with st.sidebar.form("form_adicionar"):
 
 df_carteira = carregar_carteira()
 
+# --- REMOVER ATIVO NA BARRA LATERAL ---
+st.sidebar.divider()
+st.sidebar.header("🗑️ Remover Ativo")
+lista_opcoes = ["Selecione..."] + df_carteira["Ticker"].astype(str).str.strip().tolist()
+ativo_remover = st.sidebar.selectbox("Selecione o ativo:", lista_opcoes)
+
+if st.sidebar.button("Confirmar Exclusão") and ativo_remover != "Selecione...":
+    df_limpo = carregar_carteira()
+    df_limpo["Ticker"] = df_limpo["Ticker"].astype(str).str.strip()
+    df_limpo = df_limpo[df_limpo["Ticker"] != ativo_remover]
+    salvar_carteira(df_limpo[["Ticker", "Quantidade", "Preco_Medio"]])
+    st.rerun()
+
+# --- PAINEL PRINCIPAL ---
 if df_carteira.empty:
     st.info("Sua carteira está vazia. Adicione seus ativos na barra lateral esquerda.")
 else:
@@ -165,7 +179,7 @@ else:
 
     with st.spinner("Buscando cotações, variações e dividendos..."):
         for index, row in df_carteira.iterrows():
-            ticker = row["Ticker"]
+            ticker = str(row["Ticker"]).strip()
             qtd = row["Quantidade"]
             pm = row["Preco_Medio"]
             preco, var_dia, dy = buscar_dados_ativo(ticker)
@@ -249,18 +263,3 @@ else:
     cols_cfg["Cotação Atual"] = st.column_config.NumberColumn(format="%.2f")
     cols_cfg["DY (12m)"] = st.column_config.NumberColumn(format="%.2f%%")
     cols_cfg["Investido (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
-    cols_cfg["Atual (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
-    cols_cfg["Lucro/Prejuízo (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
-    cols_cfg["Rentab. (%)"] = st.column_config.NumberColumn(format="%.2f%%")
-
-    st.dataframe(df_estilizado, use_container_width=True, hide_index=True, column_config=cols_cfg)
-
-    st.sidebar.divider()
-    st.sidebar.header("🗑️ Remover Ativo")
-    ativo_remover = st.sidebar.selectbox(
-        "Selecione o ativo:",
-        ["Selecione..."] + df_carteira["Ticker"].astype(str).str.strip().tolist(),
-        key="combo_remover",
-    )
-
-    if ativo_remover != "Selecione...":
