@@ -54,7 +54,6 @@ def salvar_carteira(df):
     df_limpo = df[["Ticker", "Quantidade", "Preco_Medio"]].copy()
     csv_texto = df_limpo.to_csv(index=False)
 
-    # Salva localmente primeiro
     df_limpo.to_csv(ARQUIVO_DADOS, index=False)
 
     if usar_github():
@@ -113,7 +112,6 @@ def buscar_dados_ativo(ticker):
         return None, 0.0, 0.0
 
 
-# Inicializa a carteira na memória da sessão
 if "df_base" not in st.session_state:
     st.session_state["df_base"] = carregar_carteira()
 
@@ -266,8 +264,9 @@ else:
 
     df_estilizado = df_carteira.style.map(colorir_lucro, subset=["Lucro/Prejuízo (R$)", "Rentab. (%)"])
 
-    cols_cfg = {
-        "Quantidade": st.column_config.NumberColumn(format="%.4f"),
-        "Preco_Medio": st.column_config.NumberColumn("Preço Médio", format="%.2f"),
-        "Cotação Atual": st.column_config.NumberColumn(format="%.2f"),
-        "DY (12m)": st.column_config.NumberColumn(format="%.2f%%"),
+    cols_cfg = dict()
+    cols_cfg["Quantidade"] = st.column_config.NumberColumn(format="%.4f")
+    cols_cfg["Preco_Medio"] = st.column_config.NumberColumn("Preço Médio", format="%.2f")
+    cols_cfg["Cotação Atual"] = st.column_config.NumberColumn(format="%.2f")
+    cols_cfg["DY (12m)"] = st.column_config.NumberColumn(format="%.2f%%")
+    cols_cfg["Investido (R$)"] = st.column_config.NumberColumn(format="R$ %.2f")
